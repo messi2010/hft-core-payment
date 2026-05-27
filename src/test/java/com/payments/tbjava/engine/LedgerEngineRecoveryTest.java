@@ -5,6 +5,7 @@ import com.payments.tbjava.domain.Account;
 import com.payments.tbjava.domain.CreateTransferResult;
 import com.payments.tbjava.domain.Transfer;
 import com.payments.tbjava.domain.TransferFlags;
+import com.payments.tbjava.domain.UInt128;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -33,12 +34,14 @@ class LedgerEngineRecoveryTest {
         return c;
     }
 
+    private static UInt128 u(long v) { return UInt128.of(v); }
+
     private static Account acct(long id) {
-        return new Account(id, 700, (short) 10, (short) 0, 0, 0, 0);
+        return new Account(u(id), 700, (short) 10, (short) 0, 0, 0, 0);
     }
 
     private static Transfer transfer(long id, long debit, long credit, long amount, int flags) {
-        return new Transfer(id, debit, credit, amount, 0, 0, 0, 0, 700, (short) 1, (short) flags, 0);
+        return new Transfer(u(id), u(debit), u(credit), amount, UInt128.ZERO, 0, 0, 0, 700, (short) 1, (short) flags, 0);
     }
 
     @Test
@@ -59,8 +62,8 @@ class LedgerEngineRecoveryTest {
             assertEquals(CreateTransferResult.LINKED_EVENT_FAILED, chain.get(0));
             assertEquals(CreateTransferResult.CREDIT_ACCOUNT_NOT_FOUND, chain.get(1));
 
-            assertEquals(100, engine.lookupAccount(1).get().debitsPosted());
-            assertNull(engine.lookupTransfer(6).get());
+            assertEquals(100, engine.lookupAccount(u(1)).get().debitsPosted());
+            assertNull(engine.lookupTransfer(u(6)).get());
         } finally {
             engine.shutdown();
         }
@@ -68,12 +71,12 @@ class LedgerEngineRecoveryTest {
         // Restart: replay the journal and assert identical state.
         LedgerEngine recovered = new LedgerEngine(config(dir));
         try {
-            assertEquals(100, recovered.lookupAccount(1).get().debitsPosted());
-            assertEquals(100, recovered.lookupAccount(2).get().creditsPosted());
-            assertNotNull(recovered.lookupTransfer(5).get());
+            assertEquals(100, recovered.lookupAccount(u(1)).get().debitsPosted());
+            assertEquals(100, recovered.lookupAccount(u(2)).get().creditsPosted());
+            assertNotNull(recovered.lookupTransfer(u(5)).get());
             // The rolled-back linked-chain transfer must NOT come back to life.
-            assertNull(recovered.lookupTransfer(6).get());
-            assertNull(recovered.lookupTransfer(7).get());
+            assertNull(recovered.lookupTransfer(u(6)).get());
+            assertNull(recovered.lookupTransfer(u(7)).get());
         } finally {
             recovered.shutdown();
         }

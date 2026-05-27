@@ -237,13 +237,13 @@ public final class LedgerStateMachine {
         int existingTslot = transfers.slotOf(t.id());
         if (existingTslot != -1) {
             Transfer existing = transfers.loadFromSlot(existingTslot);
-            if (existing.debitAccountId() == t.debitAccountId()
-                    && existing.creditAccountId() == t.creditAccountId()
+            if (existing.debitAccountId().equals(t.debitAccountId())
+                    && existing.creditAccountId().equals(t.creditAccountId())
                     && existing.amount() == t.amount()
                     && existing.ledger() == t.ledger()
                     && existing.code() == t.code()
                     && existing.flags() == t.flags()
-                    && existing.pendingId() == t.pendingId()) {
+                    && existing.pendingId().equals(t.pendingId())) {
                 return CreateTransferResult.EXISTS;
             }
             return CreateTransferResult.EXISTS_WITH_DIFFERENT_FIELDS;

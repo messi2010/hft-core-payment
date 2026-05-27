@@ -5,6 +5,7 @@ import com.payments.tbjava.domain.Account;
 import com.payments.tbjava.domain.LedgerBalance;
 import com.payments.tbjava.domain.Transfer;
 import com.payments.tbjava.domain.TransferFlags;
+import com.payments.tbjava.domain.UInt128;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -29,12 +30,14 @@ class LedgerHardeningTest {
         return c;
     }
 
+    private static UInt128 u(long v) { return UInt128.of(v); }
+
     private static Account acct(long id, int ledger) {
-        return new Account(id, ledger, (short) 10, (short) 0, 0, 0, 0);
+        return new Account(u(id), ledger, (short) 10, (short) 0, 0, 0, 0);
     }
 
     private static Transfer std(long id, long debit, long credit, long amount, int ledger) {
-        return new Transfer(id, debit, credit, amount, 0, 0, 0, 0, ledger, (short) 1, (short) 0, 0);
+        return new Transfer(u(id), u(debit), u(credit), amount, UInt128.ZERO, 0, 0, 0, ledger, (short) 1, (short) 0, 0);
     }
 
     @Test
@@ -67,22 +70,22 @@ class LedgerHardeningTest {
         LedgerEngine engine = new LedgerEngine(config(dir));
         engine.createAccounts(List.of(acct(1, 700), acct(2, 700))).get();
         // Pending with a 1s timeout reserves 50.
-        Transfer pending = new Transfer(7, 1, 2, 50, 0, 0, 0, 1, 700, (short) 1,
+        Transfer pending = new Transfer(u(7), u(1), u(2), 50, UInt128.ZERO, 0, 0, 1, 700, (short) 1,
                 (short) TransferFlags.PENDING, 0);
         engine.createTransfers(List.of(pending)).get();
-        assertEquals(50, engine.lookupAccount(1).get().debitsPending());
+        assertEquals(50, engine.lookupAccount(u(1)).get().debitsPending());
 
         // Let the timeout pass, then sweep (journals an EXPIRE command).
         Thread.sleep(1200);
         engine.expirePending().get();
-        assertEquals(0, engine.lookupAccount(1).get().debitsPending());
+        assertEquals(0, engine.lookupAccount(u(1)).get().debitsPending());
         engine.simulateCrash();
 
         // The EXPIRE command must replay deterministically: funds stay released.
         LedgerEngine recovered = new LedgerEngine(config(dir));
         try {
-            assertEquals(0, recovered.lookupAccount(1).get().debitsPending());
-            assertEquals(0, recovered.lookupAccount(2).get().creditsPending());
+            assertEquals(0, recovered.lookupAccount(u(1)).get().debitsPending());
+            assertEquals(0, recovered.lookupAccount(u(2)).get().creditsPending());
         } finally {
             recovered.shutdown();
         }
