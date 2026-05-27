@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: tbjava
+
+server:
+  port: 8081
+
+tbjava:
+  cluster-id: 1
+  data-dir: ./data
+  ring-buffer-size: 1048576       # 2^20 = 1M slots
+  max-accounts: 10000000          # 10M accounts pre-allocated
+  max-transfers: 100000000        # 100M transfers cache
+  journal:
+    segment-size-bytes: 268435456 # 256 MiB per segment
+    fsync-batch: true             # batch fsync at endOfBatch
+  snapshot:
+    interval-seconds: 300         # checkpoint every 5 min
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+logging:
+  level:
+    com.payments.tbjava: INFO
