@@ -128,3 +128,18 @@ curl -s -X POST localhost:8081/v1/transfers -H 'Content-Type: application/json' 
 - **HTTP 429** — ring buffer đầy (writer đang chậm) → client nên backoff và thử lại.
 - Ý nghĩa từng flag/mã kết quả: xem [business.md](business.md). Map vào business flow
   của nền tảng: xem [Ledger core — use cases & flows](ledger-core/README.md).
+
+## API spec (Swagger / OpenAPI)
+
+Đặc tả OpenAPI 3 đầy đủ: [`openapi.yaml`](openapi.yaml). Cách xem/dùng:
+
+- **Online:** mở <https://editor.swagger.io> → *File → Import file* → chọn `docs/openapi.yaml`.
+- **Swagger UI (Docker):**
+  ```bash
+  docker run --rm -p 8088:8080 \
+    -e SWAGGER_JSON=/spec/openapi.yaml \
+    -v "$PWD/docs:/spec" swaggerapi/swagger-ui
+  # mở http://localhost:8088
+  ```
+- **Redoc (1 lệnh):** `npx --yes @redocly/cli preview-docs docs/openapi.yaml`
+- **Postman:** *Import* → chọn `docs/openapi.yaml` → sinh sẵn collection để bấm thử.

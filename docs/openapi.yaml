@@ -1,0 +1,344 @@
+openapi: 3.0.3
+info:
+  title: Core Payment Ledger API
+  version: 0.1.0
+  description: >
+    Single-node, double-entry payment ledger. Batch endpoints return a result-code
+    name per element (positionally aligned with the request). A batch is NOT atomic
+    as a whole — only `LINKED` chains within it are atomic.
+
+
+    Ghi chú quan trọng:
+
+    - `id` trong **request** là chuỗi: số thập phân không dấu (vd `"1001"`) hoặc UUID.
+    - `id` trong **response** là object `UInt128` `{hi, lo, zero}`.
+    - Cờ transfer: `LINKED=1`, `PENDING=2`, `POST_PENDING=4`, `VOID_PENDING=8` (cộng dồn).
+    - Cờ account: `DEBITS_MUST_NOT_EXCEED_CREDITS=2`, `CREDITS_MUST_NOT_EXCEED_DEBITS=4`, `CLOSED=16`.
+servers:
+  - url: http://localhost:8081
+    description: Local dev
+
+tags:
+  - name: accounts
+  - name: transfers
+  - name: reporting
+
+paths:
+  /v1/accounts:
+    post:
+      tags: [accounts]
+      summary: Tạo lô account
+      description: Trả mã kết quả cho từng account theo đúng thứ tự gửi lên.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountsRequest'
+            examples:
+              twoAccounts:
+                summary: Ví user + cửa hàng + tài khoản hệ thống
+                value:
+                  accounts:
+                    - {id: "1001", ledger: 704, code: 10, flags: 2, userData64: 0, userData32: 0}
+                    - {id: "2001", ledger: 704, code: 20, flags: 2, userData64: 0, userData32: 0}
+                    - {id: "9001", ledger: 704, code: 30, flags: 4, userData64: 0, userData32: 0}
+      responses:
+        '200':
+          description: Mã kết quả mỗi account
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/CreateAccountResult'}
+              example: ["OK", "OK", "OK"]
+        '429':
+          $ref: '#/components/responses/RingFull'
+
+  /v1/transfers:
+    post:
+      tags: [transfers]
+      summary: Tạo lô transfer (có thể chứa linked chain / two-phase)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransfersRequest'
+            examples:
+              standard:
+                summary: Chuyển thường 1.000.000
+                value:
+                  transfers:
+                    - {id: "5001", debitAccountId: "9001", creditAccountId: "1001", amount: 1000000,
+                       pendingId: "0", userData64: 0, userData32: 0, timeoutSeconds: 0,
+                       ledger: 704, code: 700, flags: 0}
+              linkedWithFee:
+                summary: Mua hàng + phí (linked, atomic)
+                value:
+                  transfers:
+                    - {id: "5002", debitAccountId: "1001", creditAccountId: "2001", amount: 300000,
+                       pendingId: "0", userData64: 0, userData32: 0, timeoutSeconds: 0,
+                       ledger: 704, code: 720, flags: 1}
+                    - {id: "5003", debitAccountId: "2001", creditAccountId: "9002", amount: 5000,
+                       pendingId: "0", userData64: 0, userData32: 0, timeoutSeconds: 0,
+                       ledger: 704, code: 730, flags: 0}
+              pendingHold:
+                summary: Giữ tiền (PENDING) với timeout 900s
+                value:
+                  transfers:
+                    - {id: "6101", debitAccountId: "9003", creditAccountId: "2001", amount: 500000,
+                       pendingId: "0", userData64: 0, userData32: 0, timeoutSeconds: 900,
+                       ledger: 704, code: 740, flags: 2}
+              postPending:
+                summary: Chốt pending (POST_PENDING)
+                value:
+                  transfers:
+                    - {id: "6102", debitAccountId: "9003", creditAccountId: "2001", amount: 500000,
+                       pendingId: "6101", userData64: 0, userData32: 0, timeoutSeconds: 0,
+                       ledger: 704, code: 740, flags: 4}
+      responses:
+        '200':
+          description: Mã kết quả mỗi transfer
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/CreateTransferResult'}
+              example: ["OK", "OK"]
+        '429':
+          $ref: '#/components/responses/RingFull'
+
+  /v1/accounts/{id}:
+    get:
+      tags: [accounts]
+      summary: Lấy snapshot account (số dư + field)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Account snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountSnapshot'}
+        '404':
+          description: Không tìm thấy account
+
+  /v1/transfers/{id}:
+    get:
+      tags: [transfers]
+      summary: Lấy một transfer
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Transfer
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Transfer'}
+        '404':
+          description: Không tìm thấy transfer
+
+  /v1/accounts/{id}/transfers:
+    get:
+      tags: [accounts]
+      summary: Lịch sử giao dịch của account (mới nhất trước)
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 100, minimum: 1, maximum: 1000}
+          description: Số bản ghi tối đa (mặc định 100, tối đa 1000).
+      responses:
+        '200':
+          description: Danh sách transfer, newest-first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/Transfer'}
+
+  /v1/trial-balance:
+    get:
+      tags: [reporting]
+      summary: Trial balance theo từng ledger
+      description: Tổng các counter theo ledger; `debitsPosted` nên bằng `creditsPosted`.
+      responses:
+        '200':
+          description: Danh sách số dư theo ledger
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/LedgerBalance'}
+              example:
+                - {ledger: 704, accounts: 4, debitsPosted: 1305000, creditsPosted: 1305000, debitsPending: 0, creditsPending: 0}
+
+components:
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      description: Id dạng chuỗi thập phân không dấu hoặc UUID.
+      schema: {type: string}
+      example: "1001"
+
+  responses:
+    RingFull:
+      description: Ring buffer đầy — writer đang chậm. Client nên backoff và thử lại.
+      content:
+        text/plain:
+          schema: {type: string}
+
+  schemas:
+    UInt128:
+      type: object
+      description: Id 128-bit gồm hai nửa unsigned 64-bit (định dạng response).
+      properties:
+        hi: {type: integer, format: int64}
+        lo: {type: integer, format: int64}
+        zero: {type: boolean, readOnly: true}
+
+    AccountDto:
+      type: object
+      required: [id, ledger, code]
+      properties:
+        id: {type: string, description: "u128 (decimal/UUID)", example: "1001"}
+        ledger: {type: integer, format: int32, description: "boundary tiền tệ (vd 704 = VND)", example: 704}
+        code: {type: integer, description: "phân loại tài khoản, != 0", example: 10}
+        flags: {type: integer, description: "0 | 2 (DEBITS_MUST_NOT_EXCEED_CREDITS) | 4 (CREDITS_MUST_NOT_EXCEED_DEBITS) | 16 (CLOSED)", example: 2}
+        userData64: {type: integer, format: int64, default: 0}
+        userData32: {type: integer, format: int32, default: 0}
+
+    CreateAccountsRequest:
+      type: object
+      required: [accounts]
+      properties:
+        accounts:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/AccountDto'}
+
+    TransferDto:
+      type: object
+      required: [id, debitAccountId, creditAccountId, amount, ledger, code]
+      properties:
+        id: {type: string, example: "5001"}
+        debitAccountId: {type: string, example: "1001"}
+        creditAccountId: {type: string, example: "2001"}
+        amount: {type: integer, format: int64, description: "u64 minor units", example: 1000000}
+        pendingId: {type: string, description: '"0" nếu không phải POST/VOID; id pending gốc nếu có', example: "0"}
+        userData64: {type: integer, format: int64, default: 0}
+        userData32: {type: integer, format: int32, default: 0}
+        timeoutSeconds: {type: integer, format: int32, description: "chỉ dùng với PENDING; 0 = không hết hạn", default: 0}
+        ledger: {type: integer, format: int32, example: 704}
+        code: {type: integer, example: 720}
+        flags: {type: integer, description: "LINKED=1 | PENDING=2 | POST_PENDING=4 | VOID_PENDING=8 (cộng dồn)", example: 0}
+
+    CreateTransfersRequest:
+      type: object
+      required: [transfers]
+      properties:
+        transfers:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/TransferDto'}
+
+    AccountSnapshot:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UInt128'}
+        ledger: {type: integer, format: int32}
+        code: {type: integer}
+        flags: {type: integer}
+        userData64: {type: integer, format: int64}
+        userData32: {type: integer, format: int32}
+        debitsPending: {type: integer, format: int64}
+        debitsPosted: {type: integer, format: int64}
+        creditsPending: {type: integer, format: int64}
+        creditsPosted: {type: integer, format: int64}
+        timestamp: {type: integer, format: int64, description: "nanos kể từ cluster epoch"}
+
+    Transfer:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/UInt128'}
+        debitAccountId: {$ref: '#/components/schemas/UInt128'}
+        creditAccountId: {$ref: '#/components/schemas/UInt128'}
+        amount: {type: integer, format: int64}
+        pendingId: {$ref: '#/components/schemas/UInt128'}
+        userData64: {type: integer, format: int64}
+        userData32: {type: integer, format: int32}
+        timeoutSeconds: {type: integer, format: int32}
+        ledger: {type: integer, format: int32}
+        code: {type: integer}
+        flags: {type: integer}
+        timestamp: {type: integer, format: int64}
+        pending: {type: boolean, readOnly: true}
+        postPending: {type: boolean, readOnly: true}
+        voidPending: {type: boolean, readOnly: true}
+        linked: {type: boolean, readOnly: true}
+
+    LedgerBalance:
+      type: object
+      properties:
+        ledger: {type: integer, format: int32}
+        accounts: {type: integer, format: int32}
+        debitsPosted: {type: integer, format: int64}
+        creditsPosted: {type: integer, format: int64}
+        debitsPending: {type: integer, format: int64}
+        creditsPending: {type: integer, format: int64}
+
+    CreateAccountResult:
+      type: string
+      enum:
+        - OK
+        - EXISTS
+        - EXISTS_WITH_DIFFERENT_FIELDS
+        - ID_MUST_NOT_BE_ZERO
+        - LEDGER_MUST_NOT_BE_ZERO
+        - CODE_MUST_NOT_BE_ZERO
+        - FLAGS_ARE_MUTUALLY_EXCLUSIVE
+        - DEBITS_PENDING_MUST_BE_ZERO
+        - DEBITS_POSTED_MUST_BE_ZERO
+        - CREDITS_PENDING_MUST_BE_ZERO
+        - CREDITS_POSTED_MUST_BE_ZERO
+        - LINKED_EVENT_FAILED
+
+    CreateTransferResult:
+      type: string
+      enum:
+        - OK
+        - EXISTS
+        - EXISTS_WITH_DIFFERENT_FIELDS
+        - LINKED_EVENT_FAILED
+        - ID_MUST_NOT_BE_ZERO
+        - DEBIT_ACCOUNT_ID_MUST_NOT_BE_ZERO
+        - CREDIT_ACCOUNT_ID_MUST_NOT_BE_ZERO
+        - ACCOUNTS_MUST_BE_DIFFERENT
+        - AMOUNT_MUST_NOT_BE_ZERO
+        - LEDGER_MUST_NOT_BE_ZERO
+        - CODE_MUST_NOT_BE_ZERO
+        - FLAGS_ARE_MUTUALLY_EXCLUSIVE
+        - DEBIT_ACCOUNT_NOT_FOUND
+        - CREDIT_ACCOUNT_NOT_FOUND
+        - ACCOUNTS_MUST_HAVE_SAME_LEDGER
+        - TRANSFER_MUST_HAVE_SAME_LEDGER_AS_ACCOUNTS
+        - DEBIT_ACCOUNT_CLOSED
+        - CREDIT_ACCOUNT_CLOSED
+        - EXCEEDS_DEBITS_LIMIT
+        - EXCEEDS_CREDITS_LIMIT
+        - OVERFLOWS_DEBITS_PENDING
+        - OVERFLOWS_DEBITS_POSTED
+        - OVERFLOWS_CREDITS_PENDING
+        - OVERFLOWS_CREDITS_POSTED
+        - PENDING_TRANSFER_NOT_FOUND
+        - PENDING_TRANSFER_NOT_PENDING
+        - PENDING_TRANSFER_EXPIRED
+        - PENDING_TRANSFER_HAS_DIFFERENT_DEBIT_ACCOUNT_ID
+        - PENDING_TRANSFER_HAS_DIFFERENT_CREDIT_ACCOUNT_ID
+        - PENDING_TRANSFER_HAS_DIFFERENT_LEDGER
+        - PENDING_TRANSFER_HAS_DIFFERENT_AMOUNT
+        - EXCEEDS_PENDING_TRANSFER_AMOUNT

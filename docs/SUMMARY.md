@@ -17,3 +17,7 @@
   * [End-to-end walkthroughs](ledger-core/walkthroughs.md)
   * [Sequence diagrams](ledger-core/sequence-diagrams.md)
   * [Verification & gaps](ledger-core/verification.md)
+
+## High availability
+
+* [Raft active-passive (implemented)](raft-ha.md)
