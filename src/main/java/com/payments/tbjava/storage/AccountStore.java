@@ -11,11 +11,11 @@ import java.util.Iterator;
 /**
  * Pre-allocated, fixed-capacity account store.
  *
- * <p>Implementation: a Long2IntOpenHashMap maps {@code accountId -> slot index},
- * plus parallel primitive arrays for each field. This layout avoids per-account
- * object allocation entirely. With 10M accounts the store uses ~960 MiB of
- * heap (96 bytes/account), all allocated upfront -- no GC pressure during steady
- * state.
+ * <p>Implementation: an {@code Object2IntOpenHashMap<UInt128>} maps
+ * {@code accountId -> slot index}, plus parallel primitive arrays for each field.
+ * This layout avoids materializing a per-account record object (only the
+ * {@link UInt128} id is held); the hot balance counters stay in primitive
+ * {@code long[]}, all allocated upfront -- no GC pressure during steady state.
  *
  * <p>This class is NOT thread-safe. The single writer thread owns it.
  * Read-only callers must go through the engine, which serializes reads onto

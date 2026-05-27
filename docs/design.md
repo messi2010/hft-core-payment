@@ -18,7 +18,7 @@ flow) see [architecture.md](architecture.md); for the domain see
 4. **Mechanical sympathy where it pays.** Primitive-array stores, no per-account
    objects, batched fsync. But not dogmatically (see §9 — the ring event itself
    trades some of this for ergonomics).
-5. **Scope honesty.** Simplifications (u64, single node) are explicit; flags and
+5. **Scope honesty.** Simplifications (u64 amounts, single node) are explicit; flags and
    result codes that are declared but not yet enforced are called out.
 
 ## Key decisions
@@ -87,22 +87,28 @@ On failure all four are reversed; on success state is left as-is and the command
 is journaled. Because rollback restores the store to its pre-chain shape, the
 post-recovery state is identical whether or not a chain failed.
 
-### 5. In-memory primitive stores; u64 instead of u128
+### 5. In-memory primitive stores; u128 ids, u64 amounts
 
-Accounts/transfers live in parallel primitive arrays with `fastutil`
-`id → slot` maps — no per-record object, no GC churn at steady state. Ids and
-amounts are `long` (u64), not u128.
+Accounts/transfers are not materialized as per-record objects: their scalar
+fields live in parallel primitive arrays indexed by slot, with `fastutil`
+`Object2IntOpenHashMap<UInt128>` maps from `id → slot` (the hot balance counters
+stay in primitive `long[]`). Ids are 128-bit (`UInt128`, an immutable
+two-`long` record); amounts stay `long` (u64).
 
-**Trade-off:** u64 amounts max out at 9.2e18 (ample for any single currency in
-minor units) and halve memory/CPU per record. u128 was *deliberately deferred*:
-it touches every field, the journal/snapshot codecs, and — critically — the
-`fastutil` primitive `id → slot` maps have no 128-bit-key equivalent, so it would
-force a custom open-addressed map or boxing. Revisit only if multi-currency
-atomic transfers over very large amounts become a requirement.
+**Why u128 ids:** callers can use externally-generated identifiers (UUID/ULID)
+directly — negligible collision probability and no central sequence to coordinate
+across upstream systems.
+
+**Trade-off — amounts stay u64:** they max out at 9.2e18 (ample for any single
+currency in minor units) and halve memory/CPU per amount field. u128 *amounts*
+are *deliberately deferred*: they touch every amount field and the
+journal/snapshot codecs for no benefit in a single-currency, minor-unit ledger.
+Revisit only if multi-currency atomic transfers over very large amounts become a
+requirement.
 
 ### 6. The LSM engine
 
-A from-scratch `long → byte[]` log-structured merge store: a sorted memtable
+A from-scratch `UInt128 → byte[]` log-structured merge store: a sorted memtable
 (red-black tree) fronted by its own WAL, flushed to immutable SSTables
 (`DATA | INDEX | BLOOM | FOOTER`, whole-file CRC), with size-tiered compaction
 (k-way merge, newest wins, tombstones dropped only in full compaction) and a
@@ -197,7 +203,7 @@ replication for HA (e.g. wrapping with Apache Ratis), not partitioning the write
 
 ## Deliberately out of scope
 
-- **u128 ids/amounts** — deferred (§5).
+- **u128 amounts** — deferred (§5). (Ids *are* u128 / `UInt128`; only amounts stay u64.)
 - **VSR consensus / replication / state sync / cross-peer repair** — use an
   external Raft (Apache Ratis) for HA, or accept single-node with snapshot DR.
 - **VOPR-style deterministic fuzzing** — the determinism is in place to make this

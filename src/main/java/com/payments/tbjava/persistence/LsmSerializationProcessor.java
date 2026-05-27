@@ -25,8 +25,8 @@ import java.util.zip.CRC32C;
  * from. Because each checkpoint re-{@code put}s current state, the LSM's own
  * compaction reclaims superseded versions over time.
  *
- * <p>Account/transfer ids share the u64 space and could collide, hence two
- * independent trees rather than one keyspace.
+ * <p>Account/transfer ids share the 128-bit ({@link com.payments.tbjava.domain.UInt128})
+ * space and could collide, hence two independent trees rather than one keyspace.
  */
 public final class LsmSerializationProcessor implements SerializationProcessor {
 

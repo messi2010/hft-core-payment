@@ -153,11 +153,11 @@ after the snapshot loads.
 
 ## 7. LSM as the checkpoint store
 
-The `lsm/` package is a self-contained `long → byte[]` log-structured merge
+The `lsm/` package is a self-contained `UInt128 → byte[]` log-structured merge
 engine (memtable + its own WAL + immutable SSTables + bloom filters +
 size-tiered compaction + a crash-atomic manifest). It is wired into the system
 as the **snapshot backend**, not into the hot read path. `LsmSerializationProcessor`
-keeps accounts and transfers in two separate LSM trees (ids share the u64 space)
+keeps accounts and transfers in two separate LSM trees (ids share the 128-bit `UInt128` space)
 plus a tiny CRC'd `meta` file recording the snapshot id and journal offset.
 Each checkpoint re-`put`s current state; the LSM's compaction reclaims
 superseded versions. Full internals: [`README.md`](../README.md#lsm-storage-engine).

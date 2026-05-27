@@ -10,7 +10,7 @@ needs.
 
 | Concept | Meaning |
 |---|---|
-| **Account** | A bucket that money moves into and out of. Identified by a u64 `id`, scoped to a `ledger`, typed by a `code`. |
+| **Account** | A bucket that money moves into and out of. Identified by a 128-bit `id` (`UInt128`, UUID/ULID-friendly), scoped to a `ledger`, typed by a `code`. |
 | **Ledger** | A currency/unit boundary. A transfer may only move value between two accounts on the **same** ledger. (e.g. `ledger=840` = USD-cents.) |
 | **Code** | A user-defined classification of the account or transfer (e.g. "customer wallet", "fee", "settlement"). Must be non-zero. |
 | **Transfer** | A single, balanced movement: it debits one account and credits another by the same `amount`. |

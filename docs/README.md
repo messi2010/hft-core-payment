@@ -28,6 +28,6 @@ command journaling + recovery, CRC32C + torn-write detection, LSM-backed
 snapshot/checkpoint, `get_account_transfers`.
 
 Not implemented (see [design.md](design.md#deliberately-out-of-scope)): u128
-ids/amounts, VSR consensus/replication, state sync, cross-peer repair, VOPR
-fuzzing, multiversion upgrade, and several declared-but-not-yet-enforced
-transfer flags.
+amounts (ids *are* u128 / `UInt128`; only amounts remain u64), VSR
+consensus/replication, state sync, cross-peer repair, VOPR fuzzing, multiversion
+upgrade, and several declared-but-not-yet-enforced transfer flags.

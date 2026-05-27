@@ -40,7 +40,8 @@ captures is the **architectural value** of TB at a single-node level:
 | Periodic snapshot/checkpoint | ✅ LSM-backed snapshot + journal-offset tail replay |
 | LSM forest storage | ⚠️ single-tree LSM engine (`lsm/`), wired in as the checkpoint store; not in the hot read path |
 | Account history / get_account_transfers query | ✅ secondary index + `GET /v1/accounts/{id}/transfers` |
-| u128 IDs and amounts | ❌ simplified to u64 long |
+| u128 IDs | ✅ `UInt128` (UUID/ULID-friendly) |
+| u128 amounts | ❌ simplified to u64 long |
 | VSR consensus replication | ❌ use Apache Ratis externally |
 | State sync between replicas | ❌ |
 | Storage corruption repair across peers | ❌ |
@@ -49,10 +50,12 @@ captures is the **architectural value** of TB at a single-node level:
 
 The simplifications are deliberate:
 
-- **u64 IDs and amounts** — for internal payment platforms in any single
-  currency, `long` max = 9.2e18 is plenty. Saves half the memory and CPU per
-  record. Document carefully so you don't paint yourself into a corner if you
-  later need multi-currency atomic transfers across very large amounts.
+- **u128 IDs, u64 amounts** — IDs are 128-bit (`UInt128`) so callers can use
+  externally-generated identifiers (UUID/ULID) directly, with negligible
+  collision risk and no central sequence to coordinate. Amounts stay u64: for any
+  single currency in minor units, `long` max = 9.2e18 is plenty and it halves the
+  memory/CPU per amount field. Revisit u128 *amounts* only if multi-currency
+  atomic transfers across very large amounts become a requirement.
 
 - **No native consensus** — VSR done right requires Jepsen-grade testing.
   For HA, wrap tbjava in a primary-backup setup using Apache Ratis or
@@ -124,7 +127,7 @@ never lost.
 ## LSM storage engine
 
 The `lsm/` package is a self-contained log-structured merge store
-(`long key -> byte[] value`) — the "phase 2" path off the all-in-RAM ceiling.
+(`UInt128 key -> byte[] value`) — the "phase 2" path off the all-in-RAM ceiling.
 It mirrors the rest of the engine's single-writer model (one owner thread, no
 locks) and reuses the project's little-endian + CRC32C conventions.
 
