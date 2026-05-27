@@ -1,10 +1,10 @@
-# tbjava
+# Core Payment Ledger
 
-A Java implementation inspired by TigerBeetle. Captures TB's core architectural
-ideas — single-writer determinism, double-entry enforcement at the engine
-level, two-phase pending transfers, linked atomic batches, idempotency via
-transfer IDs, WAL journal with batched fsync — in a Spring Boot service that's
-operable by any team that knows Java.
+A single-node, double-entry payment ledger in Java. Core architectural ideas —
+single-writer determinism, double-entry enforcement at the engine level,
+two-phase pending transfers, linked atomic batches, idempotency via transfer
+IDs, WAL journal with batched fsync — in a Spring Boot service that's operable
+by any team that knows Java.
 
 ## Documentation
 
@@ -13,20 +13,20 @@ Detailed docs live in [`docs/`](docs/README.md):
 - [Architecture](docs/architecture.md) — components, threading model, request
   lifecycle, durability & recovery, failure handling.
 - [Design](docs/design.md) — decisions and trade-offs, the LSM engine, the
-  Disruptor event caveats, influences from TigerBeetle and exchange-core, and
-  what's deliberately out of scope.
+  Disruptor event caveats, design influences, and what's deliberately out of scope.
 - [Business / domain model](docs/business.md) — accounts, transfers,
   double-entry, flags, two-phase & linked transfers, idempotency, result codes,
   and the HTTP API.
 
 ## Scope honesty
 
-**This is not a port of all 100k+ LOC of TigerBeetle.** Real TB ships VSR
-consensus, an LSM forest, deterministic fuzz-tested storage repair, and a
-custom VOPR simulator. That's a multi-year project for a team. What this code
-captures is the **architectural value** of TB at a single-node level:
+**This is a focused single-node ledger, not a distributed database.** It does not
+ship consensus replication, an LSM forest, fuzz-tested storage repair, or a
+deterministic simulator — that's a multi-year project for a team. What this code
+captures is the **architectural value** of a purpose-built ledger at a
+single-node level:
 
-| TB feature | tbjava status |
+| Feature | Status |
 |---|---|
 | Account/Transfer data model + flags | ✅ Implemented |
 | Double-entry enforced at engine level | ✅ |
@@ -58,7 +58,7 @@ The simplifications are deliberate:
   atomic transfers across very large amounts become a requirement.
 
 - **No native consensus** — VSR done right requires Jepsen-grade testing.
-  For HA, wrap tbjava in a primary-backup setup using Apache Ratis or
+  For HA, wrap the ledger in a primary-backup setup using Apache Ratis or
   similar mature Raft library, OR accept single-node operation with file
   snapshot DR.
 
@@ -118,7 +118,7 @@ never lost.
   applies, journals the command, batches fsync, runs checkpoints.
 - `journal/Journal.java` — command-log WAL format and batched fsync.
 - `persistence/SerializationProcessor.java` — checkpoint abstraction
-  (exchange-core's `ISerializationProcessor` pattern); `LsmSerializationProcessor`
+  (a pluggable serialization interface); `LsmSerializationProcessor`
   is the LSM-backed implementation.
 - `storage/AccountStore.java` — primitive-array-based account storage.
 - `lsm/Lsm.java` — the LSM storage engine: memtable + WAL + SSTables +
@@ -169,10 +169,10 @@ mvn spring-boot:run
 The service starts on port 8081 (Spring WebFlux on Netty) and creates a journal
 at `./data/journal.log`.
 
-> **Heap sizing.** The stores are pre-allocated from `tbjava.max-accounts` /
-> `tbjava.max-transfers`. The defaults (10M / 100M) reserve several GB up front
+> **Heap sizing.** The stores are pre-allocated from `ledger.max-accounts` /
+> `ledger.max-transfers`. The defaults (10M / 100M) reserve several GB up front
 > and will OOM on a default JVM heap. For local dev, shrink them, e.g.
-> `mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dtbjava.max-accounts=10000 -Dtbjava.max-transfers=10000"`,
+> `mvn spring-boot:run -Dspring-boot.run.jvmArguments="-Dledger.max-accounts=10000 -Dledger.max-transfers=10000"`,
 > or run with a large `-Xmx` in production sized to your capacities.
 
 ```bash
@@ -237,7 +237,7 @@ transfers/sec depending on disk.
    reclaimed after a snapshot. Not yet done.
 3. **Off-thread checkpointing** — `runCheckpoint` currently snapshots on the
    writer thread, stalling writes for its duration. Production wants a
-   copy-on-write / background snapshot like TigerBeetle and exchange-core.
+   copy-on-write / background snapshot.
 4. **CDC** — add an event listener interface on commit, pump events to Kafka.
    Hook is in `LedgerEventHandler.onEvent` at the end-of-batch point.
 5. **Metrics** — Micrometer is on the classpath via actuator; instrument
@@ -248,13 +248,13 @@ transfers/sec depending on disk.
 
 ## When to use this vs alternatives
 
-- **Use this** if you want TB-style guarantees in pure Java, your data
+- **Use this** if you want ledger-style guarantees in pure Java, your data
   fits in RAM, and you're OK with single-node operation (or wrapping HA
   externally). Command journaling, LSM-backed snapshots, and account history
   ship in the box.
-- **Use real TigerBeetle** if you want the consensus replication, LSM
-  storage, and VOPR-tested correctness without building any of it yourself —
-  and you can operate a non-JVM service.
+- **Use a mature distributed ledger/database** if you need built-in consensus
+  replication, on-disk LSM storage, and simulator-tested correctness without
+  building any of it yourself.
 - **Use Postgres** if your throughput is under 5k tps and your team would
   rather scale operationally than introduce custom infrastructure.
 

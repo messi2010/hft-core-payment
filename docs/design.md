@@ -1,6 +1,6 @@
 # Design
 
-This document records the *why* behind tbjava's engine — the decisions, their
+This document records the *why* behind the ledger's engine — the decisions, their
 trade-offs, and what is deliberately left out. For the *what* (components, data
 flow) see [architecture.md](architecture.md); for the domain see
 [business.md](business.md).
@@ -32,8 +32,8 @@ drained batch. Reads are also serialized onto the writer so they never see a
 half-applied batch.
 
 **Trade-off:** throughput is bounded by one core's apply rate and by fsync
-latency, not by parallelism. For a ledger this is acceptable — TigerBeetle makes
-the same choice — and it's why we *cannot* simply shard (see §10).
+latency, not by parallelism. For a ledger this is acceptable — purpose-built
+ledgers make the same choice — and it's why we *cannot* simply shard (see §10).
 
 ### 2. Command-sourcing, not state-sourcing
 
@@ -47,8 +47,8 @@ back in memory, the already-written journal records survived, so a restart
 replayed effects that the live system had undone — state and journal diverged.
 With command-sourcing, replaying the command re-runs validation *and* rollback
 identically, so a rolled-back chain can never be half-persisted. This is the
-approach both TigerBeetle (journal the "prepare"/operation) and exchange-core
-(`writeToJournal(OrderCommand, …)`) take.
+standard approach for command-sourced engines: journal the operation, then
+replay it through the same logic.
 
 **Determinism requirement — timestamps.** The state machine assigns
 `ts = baseTimestamp + indexInBatch`. The base is reserved once per command from
@@ -123,7 +123,7 @@ Full internals and test coverage: [`README.md`](../README.md#lsm-storage-engine)
 
 ### 7. Snapshots behind a `SerializationProcessor` interface
 
-Modeled on exchange-core's `ISerializationProcessor`: `storeSnapshot(snapshotId,
+A pluggable serialization interface: `storeSnapshot(snapshotId,
 journalOffset, source)` and `loadLatestSnapshot(sink) → journalOffset`.
 Decoupling "how state is stored" from the engine lets tests use an in-memory/no-op
 impl and lets the on-disk format evolve independently. The shipped implementation
@@ -145,9 +145,9 @@ rolled back with the chain, and rebuilt from the transfer set on recovery
 `LedgerEvent` is a **reference-carrying** event: it holds pointers to the
 caller-allocated `List<Account>`/`List<Transfer>`, result lists, and a
 `CompletableFuture`. This is ergonomic but diverges from the Disruptor "flyweight"
-ideal (exchange-core's `OrderCommand` is all primitives + an enum result code +
-pooled result events, and chunks large payloads across many fixed-size messages
-via `BinaryCommandsProcessor`). Consequences to keep in mind:
+ideal (a flyweight event would be all primitives + an enum result code + pooled
+result events, chunking large payloads across many fixed-size messages).
+Consequences to keep in mind:
 
 - **Backpressure — *resolved*.** The API runs on a Netty event loop (Spring
   WebFlux), where blocking is fatal. `publish()` therefore uses
@@ -157,8 +157,8 @@ via `BinaryCommandsProcessor`). Consequences to keep in mind:
 - **Unbounded payload per slot.** One `createTransfers` call can carry an
   arbitrarily large list, so a single ring slot can hold an arbitrarily large
   batch. The ring is sized for many small events; a few huge batches make memory
-  use unpredictable. **Mitigation: bound the batch size** (TigerBeetle caps at
-  8189 transfers/batch); split larger requests at the API layer.
+  use unpredictable. **Mitigation: bound the batch size** (e.g. a few thousand
+  transfers/batch); split larger requests at the API layer.
 - **Slot retention.** A processed slot keeps its references until the producer
   *reclaims* that slot (up to a full ring lap later) and calls `reset()`. With
   large payloads this pins `ringSize × payload` of memory. **Mitigation: clear
@@ -175,31 +175,35 @@ None of these is a *live* bug at present, but they are the sharp edges to fix
 before pushing large batches or higher concurrency. They do not affect
 correctness of the single-writer apply logic itself.
 
-## Influences: TigerBeetle vs exchange-core
+## Design influences
 
-| Idea | From | Adopted in tbjava |
-|---|---|---|
-| Single-writer deterministic state machine | both | yes |
-| Double-entry, two-phase pending, linked chains, flags, result codes | TigerBeetle | yes |
-| Command journaling + replay through the engine | both | yes |
-| Snapshot tagged with a sequence/offset; replay only the tail | both | yes |
-| Pluggable serialization (`ISerializationProcessor`) | exchange-core | yes (`SerializationProcessor`) |
-| Batched fsync at end-of-batch | both | yes |
-| Non-blocking ingestion + fail-fast backpressure | exchange-core | yes (`tryNext` → 429) |
-| Reactive HTTP layer (event loop, few threads) | — | yes (Spring WebFlux / Netty) |
-| Flyweight ring event + chunking large payloads | exchange-core | **not yet** (see §9) |
-| Object pooling to remove hot-path allocation | exchange-core | not yet (fsync-bound, low ROI) |
-| Order matching / order books / margin | exchange-core | N/A (this is a ledger) |
-| Symbol sharding | exchange-core | N/A (see §10) |
+Proven ideas borrowed from purpose-built ledgers and high-throughput
+exchange/matching engines:
+
+| Idea | Adopted |
+|---|---|
+| Single-writer deterministic state machine | yes |
+| Double-entry, two-phase pending, linked chains, flags, result codes | yes |
+| Command journaling + replay through the engine | yes |
+| Snapshot tagged with a sequence/offset; replay only the tail | yes |
+| Pluggable serialization (`SerializationProcessor`) | yes |
+| Batched fsync at end-of-batch | yes |
+| Non-blocking ingestion + fail-fast backpressure | yes (`tryNext` → 429) |
+| Reactive HTTP layer (event loop, few threads) | yes (Spring WebFlux / Netty) |
+| Flyweight ring event + chunking large payloads | **not yet** (see §9) |
+| Object pooling to remove hot-path allocation | not yet (fsync-bound, low ROI) |
+| Order matching / order books / margin | N/A (this is a ledger) |
+| Symbol sharding | N/A (see §10) |
 
 ## 10. Why not shard?
 
-exchange-core shards by symbol because a trade touches exactly one order book and
-the two users' accounts (risk sharded by user). A ledger transfer touches **two
-arbitrary accounts**, and linked transfers can span arbitrary accounts, so there
-is no clean shard key that keeps cross-account atomicity local. This is the same
-reason TigerBeetle runs a single global writer. Horizontal scale therefore means
-replication for HA (e.g. wrapping with Apache Ratis), not partitioning the writer.
+High-throughput exchange engines shard by symbol because a trade touches exactly
+one order book and the two users' accounts (risk sharded by user). A ledger
+transfer touches **two arbitrary accounts**, and linked transfers can span
+arbitrary accounts, so there is no clean shard key that keeps cross-account
+atomicity local. This is the same reason purpose-built ledgers run a single
+global writer. Horizontal scale therefore means replication for HA (e.g. wrapping
+with Apache Ratis), not partitioning the writer.
 
 ## Deliberately out of scope
 

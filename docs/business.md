@@ -1,6 +1,6 @@
 # Business / domain model
 
-tbjava is a **double-entry ledger** for payment platforms. It answers one
+This is a **double-entry ledger** for payment platforms. It answers one
 question reliably and fast: *what is the balance of every account, given an
 ordered stream of value movements?* It does not price, match, or route — it
 records money moving between accounts with the guarantees an accounting system
@@ -63,7 +63,7 @@ account).
 
 ### Mapping a chart of accounts
 
-The engine has no first-class "account type" (this is the TigerBeetle model).
+The engine has no first-class "account type" (this is by design).
 You encode the type yourself via `code` (your classification) and pick the
 balance-limit flag that matches the account's normal side. Use this mapping:
 
@@ -112,7 +112,7 @@ voided/expired/non-pending one is refused
 
 > **Expiry.** Expiry is enforced two ways: *lazily* (a post/void of an expired
 > pending is refused with `PENDING_TRANSFER_EXPIRED`), and *actively* by a
-> periodic sweep (`tbjava.expiry-sweep-seconds`, default 30s) that auto-voids
+> periodic sweep (`ledger.expiry-sweep-seconds`, default 30s) that auto-voids
 > timed-out pendings and releases their reserved funds. The sweep is journaled as
 > an `EXPIRE` command tagged with an as-of timestamp, so recovery reproduces the
 > exact same voids deterministically.
@@ -195,8 +195,9 @@ id=7002 1002→1003 amount=500 flags=0        ┘
 
 ## 8. Result codes
 
-`CreateAccountResult` / `CreateTransferResult` mirror TigerBeetle's codes so a TB
-client can switch with minimal change. The transfer codes group as:
+`CreateAccountResult` / `CreateTransferResult` mirror a standard double-entry
+result-code set so a compatible client can switch with minimal change. The
+transfer codes group as:
 
 - **Outcome:** `OK`, `EXISTS`, `EXISTS_WITH_DIFFERENT_FIELDS`, `LINKED_EVENT_FAILED`
 - **Field validation:** `*_MUST_NOT_BE_ZERO`, `ACCOUNTS_MUST_BE_DIFFERENT`,
@@ -211,7 +212,7 @@ client can switch with minimal change. The transfer codes group as:
 
 ## 9. Flag & result-code coverage
 
-For protocol compatibility the enums declare the full TigerBeetle set, but not
+For protocol compatibility the enums declare the full standard set, but not
 all are enforced yet. Honest current state:
 
 **Account flags**

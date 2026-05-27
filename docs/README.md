@@ -1,19 +1,20 @@
-# tbjava documentation
+# Ledger documentation
 
-`tbjava` is a TigerBeetle-inspired, single-node double-entry payment ledger
-written in Java (Spring Boot + LMAX Disruptor). It captures TigerBeetle's
-core architectural ideas — single-writer determinism, double-entry enforced at
-the engine level, two-phase pending transfers, linked atomic batches,
+A single-node, double-entry payment ledger written in Java (Spring Boot + LMAX
+Disruptor). Core architectural ideas: single-writer determinism, double-entry
+enforced at the engine level, two-phase pending transfers, linked atomic batches,
 idempotency by transfer id, a command-sourced write-ahead log, and periodic
-snapshots — without the consensus/replication/VOPR machinery of the real thing.
+snapshots — without consensus/replication machinery (use external HA).
 
 These documents synthesize the system from three angles:
 
 | Doc | Audience | What it covers |
 |---|---|---|
+| [getting-started.md](getting-started.md) | anyone trying the service | Yêu cầu, chạy service, cấu hình, và ví dụ gọi HTTP API bằng `curl` |
 | [architecture.md](architecture.md) | engineers operating/extending the service | Components, threading model, request lifecycle, durability & recovery, failure handling |
-| [design.md](design.md) | engineers changing the engine internals | Key design decisions, their rationale and trade-offs, the LSM engine, influences from TigerBeetle and exchange-core, what is deliberately out of scope |
+| [design.md](design.md) | engineers changing the engine internals | Key design decisions, their rationale and trade-offs, the LSM engine, design influences, what is deliberately out of scope |
 | [business.md](business.md) | product / integrators / domain owners | The double-entry domain model, account & transfer semantics, flags, two-phase transfers, idempotency, result codes, and the HTTP API |
+| [ledger-core/](ledger-core/README.md) | platform integrators | Mapping mỗi business flow của nền tảng vào primitive của ledger, verify + gap analysis, và sequence diagram (Mermaid) từng flow |
 
 For a quick orientation and runnable examples see the top-level
 [`README.md`](../README.md). For the LSM internals see

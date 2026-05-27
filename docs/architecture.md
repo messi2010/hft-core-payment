@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-tbjava is a **single-writer, in-memory, journaled** ledger. All state-mutating
+This is a **single-writer, in-memory, journaled** ledger. All state-mutating
 work is funneled onto one thread through a lock-free ring buffer, applied to
 in-RAM stores by a deterministic state machine, and made durable by journaling
 the **input commands** to a write-ahead log. State that exceeds a journal's
@@ -15,8 +15,8 @@ reason about and recovery a pure replay.
 ## 2. Component map
 
 ```
-com.payments.tbjava
-├── api/            HTTP layer (Spring MVC): TbController + request DTOs
+com.payments.ledger
+├── api/            HTTP layer (Spring MVC): LedgerController + request DTOs
 ├── client/         in-process client convenience wrapper
 ├── config/         EngineConfig (data dir, ring size, capacities, snapshot interval)
 ├── domain/         Account, Transfer, flags, result enums, AccountSnapshot
@@ -41,13 +41,13 @@ com.payments.tbjava
   ring buffer, returning a `Mono` bridged from the engine's `CompletableFuture`.
   Publishing is **non-blocking** (`ringBuffer.tryNext()`): a full ring fails fast
   with `CapacityExceededException` → HTTP 429, so the event loop is never parked.
-- **One writer thread** (`tbjava-writer`) drains the ring buffer and is the sole
+- **One writer thread** (`ledger-writer`) drains the ring buffer and is the sole
   mutator of all stores. No locks are taken anywhere in the hot path because
   there is only ever one writer.
 - **Reads are serialized onto the writer thread too** (account/transfer lookups,
   history queries run as ring events). This trades a little read latency for the
   guarantee that reads never observe a partially-applied batch.
-- **One checkpoint thread** (`tbjava-checkpoint`, daemon) periodically *publishes*
+- **One checkpoint thread** (`ledger-checkpoint`, daemon) periodically *publishes*
   a checkpoint event; the snapshot itself still runs on the writer thread so it
   sees a consistent state.
 
@@ -70,7 +70,7 @@ API threads (Netty / WebFlux) ─tryNext publish─┐  (full ring → 429)
 
 ## 4. Request lifecycle (write path)
 
-1. `TbController` maps the request DTO to `List<Account>` / `List<Transfer>` and
+1. `LedgerController` maps the request DTO to `List<Account>` / `List<Transfer>` and
    calls `LedgerEngine.createAccounts/createTransfers`.
 2. `LedgerEngine.publish` claims a ring slot, resets the event, fills inputs,
    attaches a fresh `CompletableFuture`, and publishes the sequence.
@@ -106,7 +106,7 @@ It owns four in-memory structures:
 
 ## 6. Durability & recovery
 
-Two persistence mechanisms combine, exactly as in TigerBeetle: a fast-to-append
+Two persistence mechanisms combine: a fast-to-append
 **command journal** (the recent tail) and periodic **snapshots** (the bulk of
 state).
 

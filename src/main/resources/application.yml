@@ -1,11 +1,11 @@
 spring:
   application:
-    name: tbjava
+    name: ledger
 
 server:
   port: 8081
 
-tbjava:
+ledger:
   cluster-id: 1
   data-dir: ./data
   ring-buffer-size: 1048576       # 2^20 = 1M slots
@@ -25,4 +25,4 @@ management:
 
 logging:
   level:
-    com.payments.tbjava: INFO
+    com.payments.ledger: INFO
