@@ -8,9 +8,9 @@ server:
 ledger:
   cluster-id: 1
   data-dir: ./data
-  ring-buffer-size: 1048576       # 2^20 = 1M slots
-  max-accounts: 10000000          # 10M accounts pre-allocated
-  max-transfers: 100000000        # 100M transfers cache
+  ring-buffer-size: 2048          # số slot ring (dev; tăng cho prod)
+  max-accounts: 100000            # dev: cấp phát trước ~100K account. Prod: tăng + chỉnh -Xmx
+  max-transfers: 1000000          # dev: ~1M transfer. Prod: tăng (vd 100M) kèm heap đủ lớn
   journal:
     segment-size-bytes: 268435456 # 256 MiB per segment
     fsync-batch: true             # batch fsync at endOfBatch

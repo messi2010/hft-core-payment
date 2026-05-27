@@ -14,5 +14,6 @@
 * [Ledger core — use cases & flows](ledger-core/README.md)
   * [Ledger primitives & accounts](ledger-core/primitives.md)
   * [Business flows → postings](ledger-core/business-flows.md)
+  * [End-to-end walkthroughs](ledger-core/walkthroughs.md)
   * [Sequence diagrams](ledger-core/sequence-diagrams.md)
   * [Verification & gaps](ledger-core/verification.md)
