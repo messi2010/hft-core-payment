@@ -32,6 +32,11 @@ public record UInt128(long hi, long lo) implements Comparable<UInt128> {
         return new UInt128(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
     }
 
+    /** Inverse of {@link #fromUuid}: rebuild the UUID from the two halves (hi=MSB, lo=LSB). */
+    public UUID toUuid() {
+        return new UUID(hi, lo);
+    }
+
     /**
      * Parse a string id. Accepts a UUID (contains '-') or an unsigned decimal
      * integer (0 .. 2^128-1). Empty/null is treated as {@link #ZERO}.

@@ -8,7 +8,6 @@ import com.payments.ledger.domain.CreateAccountResult;
 import com.payments.ledger.domain.CreateTransferResult;
 import com.payments.ledger.domain.LedgerBalance;
 import com.payments.ledger.domain.Transfer;
-import com.payments.ledger.domain.UInt128;
 import com.payments.ledger.engine.CapacityExceededException;
 import com.payments.ledger.engine.LedgerEngine;
 import jakarta.validation.Valid;
@@ -40,7 +39,7 @@ public class LedgerController {
     public Mono<ResponseEntity<List<String>>> createAccounts(
             @Valid @RequestBody CreateAccountsRequest req) {
         List<Account> domain = req.accounts().stream()
-                .map(a -> new Account(UInt128.parse(a.id()), a.ledger(), a.code(), a.flags(),
+                .map(a -> new Account(RingId.of(a.id()), a.ledger(), a.code(), a.flags(),
                         a.userData64(), a.userData32(), 0))
                 .toList();
         return Mono.fromFuture(engine.createAccounts(domain))
@@ -52,9 +51,9 @@ public class LedgerController {
     public Mono<ResponseEntity<List<String>>> createTransfers(
             @Valid @RequestBody CreateTransfersRequest req) {
         List<Transfer> domain = req.transfers().stream()
-                .map(t -> new Transfer(UInt128.parse(t.id()),
-                        UInt128.parse(t.debitAccountId()), UInt128.parse(t.creditAccountId()),
-                        t.amount(), UInt128.parse(t.pendingId()), t.userData64(), t.userData32(),
+                .map(t -> new Transfer(RingId.of(t.id()),
+                        RingId.of(t.debitAccountId()), RingId.of(t.creditAccountId()),
+                        t.amount(), RingId.of(t.pendingId()), t.userData64(), t.userData32(),
                         t.timeoutSeconds(), t.ledger(), t.code(), t.flags(), 0))
                 .toList();
         return Mono.fromFuture(engine.createTransfers(domain))
@@ -64,14 +63,14 @@ public class LedgerController {
 
     @GetMapping("/accounts/{id}")
     public Mono<ResponseEntity<AccountSnapshot>> getAccount(@PathVariable String id) {
-        return Mono.fromFuture(engine.lookupAccount(UInt128.parse(id)))
+        return Mono.fromFuture(engine.lookupAccount(RingId.of(id)))
                 .map(ResponseEntity::ok)
                 .defaultIfEmpty(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/transfers/{id}")
     public Mono<ResponseEntity<Transfer>> getTransfer(@PathVariable String id) {
-        return Mono.fromFuture(engine.lookupTransfer(UInt128.parse(id)))
+        return Mono.fromFuture(engine.lookupTransfer(RingId.of(id)))
                 .map(ResponseEntity::ok)
                 .defaultIfEmpty(ResponseEntity.notFound().build());
     }
@@ -82,7 +81,7 @@ public class LedgerController {
             @PathVariable String id,
             @RequestParam(defaultValue = "100") int limit) {
         int capped = Math.max(1, Math.min(limit, 1000));
-        return Mono.fromFuture(engine.getAccountTransfers(UInt128.parse(id), capped))
+        return Mono.fromFuture(engine.getAccountTransfers(RingId.of(id), capped))
                 .map(ResponseEntity::ok);
     }
 
