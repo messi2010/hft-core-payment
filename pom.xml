@@ -19,7 +19,6 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <aeron.version>1.48.0</aeron.version>
     </properties>
 
     <dependencies>
@@ -50,25 +49,21 @@
             <version>8.5.13</version>
         </dependency>
 
-        <!--
-            Aeron Cluster (OSS) for active-passive HA:
-              - aeron-all bundles MediaDriver + Archive + Cluster + Agrona (DirectBuffer).
-              - ClusterBackup ships in the same artifact (DR / warm copy via archive replication).
-              - Premium "Standby" (live read replica with online promotion) would be a
-                separate commercial artifact; not used here.
-        -->
+        <!-- Raft consensus for active-passive HA (replicated command log) -->
         <dependency>
-            <groupId>io.aeron</groupId>
-            <artifactId>aeron-all</artifactId>
-            <version>${aeron.version}</version>
+            <groupId>org.apache.ratis</groupId>
+            <artifactId>ratis-server</artifactId>
+            <version>3.1.0</version>
         </dependency>
-        <!-- TestCluster lives in aeron-cluster's test-jar for integration tests. -->
         <dependency>
-            <groupId>io.aeron</groupId>
-            <artifactId>aeron-cluster</artifactId>
-            <version>${aeron.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
+            <groupId>org.apache.ratis</groupId>
+            <artifactId>ratis-grpc</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.ratis</groupId>
+            <artifactId>ratis-metrics-default</artifactId>
+            <version>3.1.0</version>
         </dependency>
 
         <dependency>
