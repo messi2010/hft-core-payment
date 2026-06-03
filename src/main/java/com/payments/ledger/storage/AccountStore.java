@@ -113,14 +113,25 @@ public final class AccountStore {
 
     public boolean wouldExceedDebitLimit(int slot, long extra) {
         if (!hasFlag(slot, AccountFlags.DEBITS_MUST_NOT_EXCEED_CREDITS)) return false;
-        long newDebits = debitsPosted[slot] + debitsPending[slot] + extra;
-        return Long.compareUnsigned(newDebits, creditsPosted[slot]) > 0;
+        long posted  = debitsPosted[slot];
+        long pending = debitsPending[slot];
+        // Check (posted + pending) for unsigned overflow before adding extra.
+        long sum1 = posted + pending;
+        if (Long.compareUnsigned(sum1, posted) < 0) return true;   // sum1 wrapped → definitely exceeds
+        long total = sum1 + extra;
+        if (Long.compareUnsigned(total, sum1) < 0) return true;    // total wrapped → definitely exceeds
+        return Long.compareUnsigned(total, creditsPosted[slot]) > 0;
     }
 
     public boolean wouldExceedCreditLimit(int slot, long extra) {
         if (!hasFlag(slot, AccountFlags.CREDITS_MUST_NOT_EXCEED_DEBITS)) return false;
-        long newCredits = creditsPosted[slot] + creditsPending[slot] + extra;
-        return Long.compareUnsigned(newCredits, debitsPosted[slot]) > 0;
+        long posted  = creditsPosted[slot];
+        long pending = creditsPending[slot];
+        long sum1 = posted + pending;
+        if (Long.compareUnsigned(sum1, posted) < 0) return true;
+        long total = sum1 + extra;
+        if (Long.compareUnsigned(total, sum1) < 0) return true;
+        return Long.compareUnsigned(total, debitsPosted[slot]) > 0;
     }
 
     /** Immutable snapshot for external consumers. */
