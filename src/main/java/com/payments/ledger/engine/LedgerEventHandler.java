@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
@@ -29,6 +30,9 @@ public final class LedgerEventHandler implements EventHandler<LedgerEvent> {
     private final Journal journal;
     private final IdGenerator clock;
     private final SerializationProcessor serde;
+
+    /** Accumulates events across the current Disruptor batch; flushed at endOfBatch. */
+    private final List<LedgerEvent> pendingBatch = new ArrayList<>();
 
     public LedgerEventHandler(LedgerStateMachine stateMachine, Journal journal,
                               IdGenerator clock, SerializationProcessor serde) {
@@ -73,17 +77,25 @@ public final class LedgerEventHandler implements EventHandler<LedgerEvent> {
             log.error("Event {} failed: {}", event.op, ex.getMessage(), ex);
         }
 
+        if (event.future != null) {
+            pendingBatch.add(event);
+        }
+
         if (endOfBatch) {
+            // Fsync first: this is the durability barrier. All futures complete only
+            // after this call returns, so no caller is told "OK" before data is on disk.
             try {
                 journal.flush();
             } catch (IOException e) {
                 log.error("Journal flush failed -- engine integrity at risk", e);
-                event.error = e;
+                for (LedgerEvent e2 : pendingBatch) {
+                    if (e2.error == null) e2.error = e;
+                }
             }
-        }
-
-        if (event.future != null) {
-            event.future.complete(event);
+            for (LedgerEvent e2 : pendingBatch) {
+                e2.future.complete(e2);
+            }
+            pendingBatch.clear();
         }
     }
 
@@ -121,4 +133,3 @@ public final class LedgerEventHandler implements EventHandler<LedgerEvent> {
         }
     }
 }
-
