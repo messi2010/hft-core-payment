@@ -49,7 +49,7 @@
             <version>8.5.13</version>
         </dependency>
 
-        <!-- Raft consensus for active-passive HA (replicated command log) -->
+        <!-- Ratis: raft/ package (active-passive HA, replicated command log) -->
         <dependency>
             <groupId>org.apache.ratis</groupId>
             <artifactId>ratis-server</artifactId>
@@ -64,6 +64,13 @@
             <groupId>org.apache.ratis</groupId>
             <artifactId>ratis-metrics-default</artifactId>
             <version>3.1.0</version>
+        </dependency>
+
+        <!-- Aeron: cluster/ package (Aeron Cluster codec + Agrona DirectBuffer) -->
+        <dependency>
+            <groupId>io.aeron</groupId>
+            <artifactId>aeron-all</artifactId>
+            <version>1.48.0</version>
         </dependency>
 
         <dependency>
